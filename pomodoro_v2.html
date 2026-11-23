@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pomodoro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Itim&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --rosa: #e2979c;
+    --vermelho: #e7305b;
+    --verde: #9bdeac;
+    --amarelo: #f7f5dd;
+    --tinta: #3b2c2c;
+
+    /* fase atual: cor forte (texto/anel) e cor suave (fundos) */
+    --fase: #a89f6a;
+    --fase-suave: #ece8c2;
+  }
+  body.timer       { --fase: #a89f6a; --fase-suave: #ece8c2; }
+  body.foco        { --fase: #3f9a5d; --fase-suave: #d3f1db; }
+  body.pausa       { --fase: #c0626b; --fase-suave: #f6dcde; }
+  body.pausa-longa { --fase: #e7305b; --fase-suave: #fbd3dc; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+    background:
+      radial-gradient(circle at 20% 10%, #fffdf0 0, transparent 45%),
+      radial-gradient(circle at 85% 90%, var(--fase-suave) 0, transparent 50%),
+      var(--amarelo);
+    font-family: "Itim", "Trebuchet MS", "Segoe UI", sans-serif;
+    color: var(--tinta);
+    transition: background .6s;
+  }
+
+  .app { width: min(100%, 400px); text-align: center; }
+
+  /* ---------- Título da fase (Label) ---------- */
+  #fase {
+    display: inline-block;
+    margin: 0 0 14px;
+    padding: 6px 22px 7px;
+    font-size: 1.7rem;
+    font-weight: 400;
+    color: var(--fase);
+    background: var(--fase-suave);
+    border-radius: 999px;
+    transition: color .4s, background .4s;
+  }
+
+  /* ---------- Canvas: anel + tomate + tempo ---------- */
+  #canvas {
+    position: relative;
+    width: min(100%, 320px);
+    aspect-ratio: 1;
+    margin: 0 auto;
+  }
+  #canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  .anel-fundo { fill: none; stroke: rgba(59,44,44,.08); stroke-width: 8; }
+  .anel {
+    fill: none;
+    stroke: var(--fase);
+    stroke-width: 8;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: stroke-dashoffset 1s linear, stroke .4s;
+  }
+
+  #tomate {
+    inset: 9%;
+    width: 82%;
+    height: 82%;
+    filter: drop-shadow(0 14px 14px rgba(180, 50, 40, .22));
+  }
+  body.rodando #tomate { animation: respira 3.2s ease-in-out infinite; }
+  @keyframes respira {
+    50% { transform: scale(1.025); }
+  }
+
+  #tempo {
+    position: absolute;
+    inset: 0;
+    padding-top: 14%;
+    display: grid;
+    place-items: center;
+    font-size: clamp(2.6rem, 14vw, 3.6rem);
+    color: #fff;
+    letter-spacing: 2px;
+    text-shadow: 0 2px 0 rgba(150, 30, 40, .35), 0 6px 14px rgba(120, 20, 30, .35);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Tarefa ---------- */
+  .tarefa {
+    margin: 20px auto 0;
+    width: min(100%, 300px);
+  }
+  .tarefa input {
+    width: 100%;
+    font: inherit;
+    text-align: center;
+    padding: 10px 14px;
+    color: var(--tinta);
+    background: rgba(255,255,255,.65);
+    border: 2px dashed rgba(59,44,44,.2);
+    border-radius: 14px;
+  }
+  .tarefa input::placeholder { color: rgba(59,44,44,.45); }
+  .tarefa input:focus { outline: none; border-color: var(--fase); background: #fff; }
+
+  /* ---------- Botões ---------- */
+  .botoes { display: flex; justify-content: center; gap: 12px; margin-top: 16px; }
+  button {
+    font: inherit;
+    font-size: 1.1rem;
+    padding: 11px 28px 12px;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: transform .12s, box-shadow .12s, opacity .2s;
+  }
+  button:active:not(:disabled) { transform: translateY(3px); box-shadow: none !important; }
+  button:focus-visible { outline: 3px solid var(--tinta); outline-offset: 3px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  #btn-iniciar   { background: var(--verde); color: #1d4a2b; box-shadow: 0 4px 0 #6fbf86; }
+  #btn-reiniciar { background: var(--rosa);  color: #5a1a22; box-shadow: 0 4px 0 #c27379; }
+  button:hover:not(:disabled) { filter: brightness(1.05); }
+
+  /* ---------- Marcadores ---------- */
+  #marcadores {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+  }
+  .marca {
+    width: 34px; height: 34px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    font-size: 1.1rem;
+    color: transparent;
+    border: 2px dashed rgba(59,44,44,.22);
+    transition: background .3s, color .3s, border-color .3s, transform .3s;
+  }
+  .marca.feito {
+    color: #fff;
+    background: #3f9a5d;
+    border: 2px solid #3f9a5d;
+    transform: rotate(-6deg);
+  }
+
+  /* ---------- Mensagem de pausa ---------- */
+  #mensagem {
+    position: relative;
+    margin: 22px auto 0;
+    padding: 16px 20px 16px 22px;
+    min-height: 74px;
+    display: grid;
+    align-items: center;
+    text-align: left;
+    font-size: 1.02rem;
+    line-height: 1.45;
+    background: rgba(255,255,255,.7);
+    border-left: 6px solid var(--fase);
+    border-radius: 6px 18px 18px 6px;
+    transition: border-color .4s;
+  }
+  #mensagem b { display: block; margin-bottom: 4px; color: var(--fase); font-weight: 400; }
+  #mensagem.entra { animation: entra .5s ease-out; }
+  @keyframes entra { from { opacity: 0; transform: translateY(8px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    body.rodando #tomate, #mensagem.entra { animation: none; }
+    .anel { transition: none; }
+  }
+</style>
+</head>
+<body class="timer">
+
+<main class="app">
+
+  <!-- Título: classes timer | foco | pausa | pausa-longa (ficam no <body>) -->
+  <h1 id="fase">Timer</h1>
+
+  <!-- Canvas: anel de progresso + tomate + tempo -->
+  <div id="canvas">
+    <svg viewBox="0 0 340 340" aria-hidden="true">
+      <circle class="anel-fundo" cx="170" cy="170" r="160"/>
+      <circle class="anel" id="anel" cx="170" cy="170" r="160"/>
+    </svg>
+
+    <svg id="tomate" viewBox="0 0 300 300" role="img" aria-label="Tomate">
+      <defs>
+        <radialGradient id="corpo" cx="32%" cy="28%" r="85%">
+          <stop offset="0" stop-color="#ff9a7e"/>
+          <stop offset=".55" stop-color="#ec6247"/>
+          <stop offset="1" stop-color="#cf4330"/>
+        </radialGradient>
+        <linearGradient id="folha" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#5eb261"/>
+          <stop offset="1" stop-color="#2f7d3e"/>
+        </linearGradient>
+      </defs>
+      <path d="M150 62 C220 44 284 92 284 170 C284 238 224 284 150 284 C76 284 16 238 16 170 C16 92 80 44 150 62Z" fill="url(#corpo)"/>
+      <path d="M52 140 C46 112 66 88 90 88 C80 104 76 124 80 142 C76 158 56 162 52 140Z" fill="#fff" opacity=".38"/>
+      <circle cx="68" cy="182" r="9" fill="#fff" opacity=".38"/>
+      <path d="M150 74 C120 56 92 62 78 80 C104 96 132 94 150 74Z" fill="url(#folha)"/>
+      <path d="M150 74 C180 56 208 62 222 80 C196 96 168 94 150 74Z" fill="url(#folha)"/>
+      <path d="M150 76 C138 48 150 26 180 10 C182 42 172 64 150 76Z" fill="url(#folha)"/>
+    </svg>
+
+    <div id="tempo" role="timer" aria-live="off">00:00</div>
+  </div>
+
+  <!-- Tarefa -->
+  <div class="tarefa">
+    <input id="tarefa" type="text" maxlength="40" placeholder="No que você vai focar?" aria-label="Tarefa">
+  </div>
+
+  <!-- Botões -->
+  <div class="botoes">
+    <button id="btn-iniciar" type="button">Iniciar</button>
+    <button id="btn-reiniciar" type="button">Reiniciar</button>
+  </div>
+
+  <!-- Marcadores: um ✔ por ciclo de foco concluído -->
+  <div id="marcadores" aria-label="Ciclos de foco concluídos"></div>
+
+  <!-- Mensagem da pausa -->
+  <div id="mensagem"><span>Escolha uma tarefa e clique em Iniciar.</span></div>
+
+</main>
+
+<script>
+/* ============================================================
+   DEMO só para mostrar o visual. A lógica de verdade é feita
+   em Python; aqui o JS espelha as mesmas regras (reps % 8 etc.)
+   ============================================================ */
+const FOCO = 1, PAUSA = 1, PAUSA_LONGA = 2;   // minutos (em produção: 25, 5, 20)
+
+const MENSAGENS = [
+  ["🚀 Inovação", "Lembre-se de Ada Lovelace: o único limite para a tecnologia é a nossa imaginação. Descanse os olhos, respire e volte pronta para inovar!"],
+  ["💡 Legado",   "Do ENIAC a Marte: mulheres sempre lideraram a revolução digital. Você faz parte desse legado. Respire fundo e continue criando a sua história!"],
+  ["💻 Código",   "Cada linha de código que você escreve hoje constrói o futuro da tecnologia. Aproveite estes minutos para recarregar sua genialidade."],
+  ["🍅 Foco",     "25 minutos de foco absoluto merecem 5 minutos de descanso de qualidade. Recarregue as energias para criar o próximo grande projeto!"]
+];
+
+const $ = id => document.getElementById(id);
+const fase = $("fase"), tempo = $("tempo"), anel = $("anel"),
+      btnIniciar = $("btn-iniciar"), btnReiniciar = $("btn-reiniciar"),
+      marcadores = $("marcadores"), mensagem = $("mensagem");
+
+const CIRC = 2 * Math.PI * 160;
+anel.style.strokeDasharray = CIRC;
+
+let reps = 0, timer = null, msgIdx = 0;
+
+function setFase(classe, texto) {
+  document.body.className = classe + (timer ? " rodando" : "");
+  fase.textContent = texto;
+}
+
+function mostrarMensagem(html) {
+  mensagem.innerHTML = html;
+  mensagem.classList.remove("entra");
+  void mensagem.offsetWidth;          // reinicia a animação
+  mensagem.classList.add("entra");
+}
+
+function desenharMarcadores() {
+  const feitos = Math.floor(reps / 2);
+  marcadores.innerHTML = "";
+  for (let i = 0; i < Math.max(4, feitos); i++) {
+    const m = document.createElement("div");
+    m.className = "marca" + (i < feitos ? " feito" : "");
+    m.textContent = "✔";
+    marcadores.appendChild(m);
+  }
+}
+
+function desenharTempo(restante, total) {
+  const min = String(Math.floor(restante / 60)).padStart(2, "0");
+  const seg = String(restante % 60).padStart(2, "0");
+  tempo.textContent = `${min}:${seg}`;
+  anel.style.strokeDashoffset = CIRC * (1 - restante / total);
+  document.title = `${min}:${seg} · ${fase.textContent}`;
+}
+
+function contagem(segundos, total) {
+  desenharTempo(segundos, total);
+  if (segundos > 0) {
+    timer = setTimeout(contagem, 1000, segundos - 1, total);
+  } else {
+    fimDeCiclo();
+  }
+}
+
+function iniciar() {
+  reps++;
+  btnIniciar.disabled = true;
+  let minutos;
+  if (reps % 8 === 0)      { minutos = PAUSA_LONGA; timer = 1; setFase("pausa-longa", "Pausa longa"); }
+  else if (reps % 2 === 0) { minutos = PAUSA;       timer = 1; setFase("pausa", "Pausa"); }
+  else                     { minutos = FOCO;        timer = 1; setFase("foco", "Foco"); }
+
+  if (reps % 2 === 0) {
+    const [titulo, texto] = MENSAGENS[msgIdx++ % MENSAGENS.length];
+    mostrarMensagem(`<span><b>${titulo}</b>${texto}</span>`);
+  } else {
+    const t = $("tarefa").value.trim();
+    mostrarMensagem(`<span>${t ? "Focando em: <b>" + t + "</b>" : "Foco total. Você consegue!"}</span>`);
+  }
+  contagem(minutos * 60, minutos * 60);
+}
+
+function fimDeCiclo() {
+  desenharMarcadores();
+  iniciar();                          // próxima fase começa sozinha
+}
+
+function reiniciar() {
+  clearTimeout(timer); timer = null;
+  reps = 0;
+  btnIniciar.disabled = false;
+  setFase("timer", "Timer");
+  tempo.textContent = "00:00";
+  anel.style.strokeDashoffset = 0;
+  document.title = "Pomodoro";
+  desenharMarcadores();
+  mostrarMensagem("<span>Escolha uma tarefa e clique em Iniciar.</span>");
+}
+
+btnIniciar.addEventListener("click", iniciar);
+btnReiniciar.addEventListener("click", reiniciar);
+reiniciar();
+</script>
+</body>
+</html>
